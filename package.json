@@ -1,0 +1,19 @@
+{
+  "name": "steadypath",
+  "version": "1.0.0",
+  "description": "SteadyPath — Dynamic Path Planning & Replanning Simulation",
+  "type": "module",
+  "scripts": {
+    "test": "node src/tests/runNodeTests.js",
+    "dev": "npx -y serve ."
+  },
+  "keywords": [
+    "path-planning",
+    "astar",
+    "simulation",
+    "warehouse",
+    "autonomous-vehicle"
+  ],
+  "author": "",
+  "license": "MIT"
+}
