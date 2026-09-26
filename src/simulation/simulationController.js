@@ -68,7 +68,7 @@ export class SimulationController {
         });
     }
 
-    _handleDestinationClick(world) {
+    handleDestinationClick(world) {
         if (!this.engine.map.isInsideBounds(world.x, world.y)) {
             this.engine._log('[UI] Click outside warehouse bounds');
             return;
@@ -80,15 +80,18 @@ export class SimulationController {
         this.engine.setDestination(world.x, world.y);
     }
 
-    _handleBlockageClick(world) {
+    handleBlockageClick(world) {
         if (!this.engine.map.isInsideBounds(world.x, world.y)) return;
         // Center blockage on click point
         this.engine.addBlockage(world.x - 0.75, world.y - 0.75, 1.5, 1.5);
+    }
 
-        // If vehicle is currently moving, check if we need to replan
-        if (this.engine.state === SimState.MOVING) {
-            // The engine will detect blockage in the next tick
-        }
+    _handleDestinationClick(world) {
+        this.handleDestinationClick(world);
+    }
+
+    _handleBlockageClick(world) {
+        this.handleBlockageClick(world);
     }
 
     // ── Button Handlers ─────────────────────────────────────

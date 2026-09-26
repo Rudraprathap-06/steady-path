@@ -1,5 +1,5 @@
 // ============================================================
-// SteadyPath — Application Main Entrypoint
+// SteadyPath — Application Main Entrypoint (3D Simulation)
 // ============================================================
 
 import { WAREHOUSE } from './config/config.js';
@@ -8,32 +8,54 @@ import { SimulationController, InteractionMode } from './simulation/simulationCo
 import { WarehouseRenderer } from './visualization/warehouseRenderer.js';
 import { PathRenderer } from './visualization/pathRenderer.js';
 import { VehicleRenderer } from './visualization/vehicleRenderer.js';
+import { ThreeWarehouseScene } from './visualization3d/threeWarehouseScene.js';
 import { runAllTests } from './tests/testRunner.js';
 
 window.addEventListener('DOMContentLoaded', () => {
-    const canvas = document.getElementById('sim-canvas');
-    const ctx = canvas.getContext('2d');
+    // ── Simulation Engine & Controller ──────────────────────
+    const canvas2d = document.getElementById('sim-canvas');
+    const ctx2d = canvas2d.getContext('2d');
+    const webglContainer = document.getElementById('webgl-container');
 
     const engine = new SimulationEngine();
-    const controller = new SimulationController(engine, canvas);
+    const controller = new SimulationController(engine, canvas2d);
 
-    const warehouseRenderer = new WarehouseRenderer(ctx);
-    const pathRenderer = new PathRenderer(ctx);
-    const vehicleRenderer = new VehicleRenderer(ctx);
+    // ── 2D Canvas Renderers (for 2D Plan View mode) ──────────
+    const warehouseRenderer = new WarehouseRenderer(ctx2d);
+    const pathRenderer = new PathRenderer(ctx2d);
+    const vehicleRenderer = new VehicleRenderer(ctx2d);
 
+    // ── 3D WebGL Scene (Primary Simulation View) ────────────
+    let threeScene = null;
+    let is3DMode = true;
+    let showGrid = true;
+
+    try {
+        threeScene = new ThreeWarehouseScene(webglContainer, engine, controller);
+        threeScene.setGridVisible(showGrid);
+    } catch (err) {
+        console.error('Failed to initialize Three.js 3D scene:', err);
+        is3DMode = false;
+        webglContainer.style.display = 'none';
+        canvas2d.style.display = 'block';
+    }
+
+    // ── 2D Canvas Scaling & Sizing ──────────────────────────
     let scale = 20;
     let offsetX = 20;
     let offsetY = 20;
-    let showGrid = true;
 
-    // ── Resize canvas to fit container ──────────────────────
     function handleResize() {
-        const rect = canvas.parentElement.getBoundingClientRect();
+        if (threeScene && is3DMode) {
+            threeScene._handleResize();
+        }
+
+        const rect = canvas2d.parentElement.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        ctx.resetTransform();
-        ctx.scale(dpr, dpr);
+        canvas2d.width = rect.width * dpr;
+        canvas2d.height = rect.height * dpr;
+        ctx2d.resetTransform();
+        ctx2d.scale(dpr, dpr);
 
         const w = rect.width;
         const h = rect.height;
@@ -52,10 +74,11 @@ window.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', handleResize);
     handleResize();
 
-    // ── Mouse coordinate tracking ───────────────────────────
+    // ── Mouse coordinate tracking for 2D View ───────────────
     const cursorCoordsEl = document.getElementById('cursor-coords');
-    canvas.addEventListener('mousemove', (e) => {
-        const rect = canvas.getBoundingClientRect();
+    canvas2d.addEventListener('mousemove', (e) => {
+        if (is3DMode) return;
+        const rect = canvas2d.getBoundingClientRect();
         const cx = e.clientX - rect.left;
         const cy = e.clientY - rect.top;
         const world = controller.canvasToWorld(cx, cy);
@@ -87,6 +110,22 @@ window.addEventListener('DOMContentLoaded', () => {
     const btnRunTests = document.getElementById('btn-run-tests');
     const gridToggle = document.getElementById('grid-toggle');
 
+    // 3D View & Camera Toolbar Elements
+    const btnToggle3D = document.getElementById('btn-toggle-3d');
+    const btnToggle2D = document.getElementById('btn-toggle-2d');
+    const cameraToolbar = document.getElementById('camera-toolbar');
+    const viewportHints = document.getElementById('viewport-hints');
+    const panelCamera = document.getElementById('panel-camera');
+    const btnCamReset = document.getElementById('btn-cam-reset');
+
+    const camBtns = document.querySelectorAll('.cam-btn[data-view]');
+    const sideCamBtns = {
+        orbit: document.getElementById('btn-side-cam-orbit'),
+        topdown: document.getElementById('btn-side-cam-topdown'),
+        follow: document.getElementById('btn-side-cam-follow'),
+        firstperson: document.getElementById('btn-side-cam-firstperson'),
+    };
+
     // Telemetry Elements
     const valState = document.getElementById('val-state');
     const valPos = document.getElementById('val-pos');
@@ -100,11 +139,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // ── Mode Switchers ──────────────────────────────────────
     function updateModeUI() {
+        const placeTarget = is3DMode ? 'Floor' : 'Canvas';
         if (controller.mode === InteractionMode.SET_DESTINATION) {
             btnModeDest.classList.add('active');
             btnModeBlock.classList.remove('active');
             modeIndicator.className = 'mode-indicator destination';
-            modeIndicator.textContent = 'Mode: Set Destination (Click Canvas)';
+            modeIndicator.textContent = `Mode: Set Destination (Click ${placeTarget})`;
         } else {
             btnModeDest.classList.remove('active');
             btnModeBlock.classList.add('active');
@@ -123,6 +163,75 @@ window.addEventListener('DOMContentLoaded', () => {
         updateModeUI();
     });
 
+    // ── 3D vs 2D View Switcher ──────────────────────────────
+    function setViewMode(mode3d) {
+        is3DMode = mode3d;
+        if (is3DMode) {
+            btnToggle3D.classList.add('active');
+            btnToggle2D.classList.remove('active');
+            webglContainer.style.display = 'block';
+            canvas2d.style.display = 'none';
+            if (cameraToolbar) cameraToolbar.style.display = 'flex';
+            if (viewportHints) viewportHints.style.display = 'flex';
+            if (panelCamera) panelCamera.style.display = 'block';
+            if (threeScene) threeScene._handleResize();
+        } else {
+            btnToggle3D.classList.remove('active');
+            btnToggle2D.classList.add('active');
+            webglContainer.style.display = 'none';
+            canvas2d.style.display = 'block';
+            if (cameraToolbar) cameraToolbar.style.display = 'none';
+            if (viewportHints) viewportHints.style.display = 'none';
+            if (panelCamera) panelCamera.style.display = 'none';
+            handleResize();
+        }
+        updateModeUI();
+    }
+
+    if (btnToggle3D && btnToggle2D) {
+        btnToggle3D.addEventListener('click', () => setViewMode(true));
+        btnToggle2D.addEventListener('click', () => setViewMode(false));
+    }
+
+    // ── Camera Vantage Controls ─────────────────────────────
+    function activateCameraView(viewName) {
+        if (!threeScene) return;
+        threeScene.setView(viewName);
+
+        // Update toolbar buttons
+        camBtns.forEach((btn) => {
+            if (btn.dataset.view === viewName) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+
+        // Update sidebar buttons
+        Object.keys(sideCamBtns).forEach((key) => {
+            if (sideCamBtns[key]) {
+                if (key === viewName) sideCamBtns[key].classList.add('active');
+                else sideCamBtns[key].classList.remove('active');
+            }
+        });
+    }
+
+    camBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            activateCameraView(btn.dataset.view);
+        });
+    });
+
+    Object.keys(sideCamBtns).forEach((viewKey) => {
+        const btn = sideCamBtns[viewKey];
+        if (btn) {
+            btn.addEventListener('click', () => activateCameraView(viewKey));
+        }
+    });
+
+    if (btnCamReset) {
+        btnCamReset.addEventListener('click', () => {
+            activateCameraView('orbit');
+        });
+    }
+
     // ── Buttons ─────────────────────────────────────────────
     btnStart.addEventListener('click', () => controller.start());
     btnPause.addEventListener('click', () => controller.pause());
@@ -140,6 +249,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
     gridToggle.addEventListener('change', (e) => {
         showGrid = e.target.checked;
+        if (threeScene) {
+            threeScene.setGridVisible(showGrid);
+        }
     });
 
     // ── Update Telemetry & Logs on Engine Change ────────────
@@ -195,9 +307,9 @@ window.addEventListener('DOMContentLoaded', () => {
                 div.innerHTML = `<span class="planner">${escapeHtml(line)}</span>`;
             } else if (line.includes('[REPLANNER]')) {
                 div.innerHTML = `<span class="replanner">${escapeHtml(line)}</span>`;
-            } else if (line.includes('[SIM]')) {
+            } else if (line.includes('[SIM]') || line.includes('[3D]')) {
                 div.innerHTML = `<span class="sim">${escapeHtml(line)}</span>`;
-            } else if (line.includes('❌') || line.includes('error') || line.includes('blocked') || line.includes('No valid')) {
+            } else if (line.includes('❌') || line.includes('error') || line.includes('blocked') || line.includes('No valid') || line.includes('Blockage detected')) {
                 div.innerHTML = `<span class="error">${escapeHtml(line)}</span>`;
             } else {
                 div.textContent = line;
@@ -211,20 +323,24 @@ window.addEventListener('DOMContentLoaded', () => {
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    // ── Continuous Animation Render Loop ────────────────────
+    // ── Continuous Animation & Render Loop ──────────────────
     function loop() {
-        const rect = canvas.getBoundingClientRect();
-        ctx.clearRect(0, 0, rect.width, rect.height);
-
-        warehouseRenderer.render(engine.map, scale, offsetX, offsetY, engine.destination, showGrid);
-        pathRenderer.render(engine.planResult, scale, offsetX, offsetY, engine._waypointIndex);
-        vehicleRenderer.render(engine.vehicle, scale, offsetX, offsetY);
-
         requestAnimationFrame(loop);
+
+        if (is3DMode && threeScene) {
+            threeScene.render();
+        } else if (!is3DMode) {
+            const rect = canvas2d.getBoundingClientRect();
+            ctx2d.clearRect(0, 0, rect.width, rect.height);
+
+            warehouseRenderer.render(engine.map, scale, offsetX, offsetY, engine.destination, showGrid);
+            pathRenderer.render(engine.planResult, scale, offsetX, offsetY, engine._waypointIndex);
+            vehicleRenderer.render(engine.vehicle, scale, offsetX, offsetY);
+        }
     }
 
     updateModeUI();
-    engine._log('[SIM] SteadyPath initialized at (2.0, 2.0)');
-    engine._log('[SIM] Click on the warehouse to set a destination');
+    engine._log('[SIM] SteadyPath 3D initialized at (2.0, 2.0)');
+    engine._log('[SIM] Click on the warehouse floor to set a destination');
     loop();
 });

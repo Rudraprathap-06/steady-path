@@ -3,21 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="SteadyPath — Autonomous warehouse vehicle dynamic path planning, A* search, path smoothing, and real-time replanning simulation.">
-    <title>SteadyPath — Dynamic Path Planning Simulation</title>
+    <meta name="description" content="SteadyPath — Autonomous warehouse vehicle dynamic path planning, A* search, path smoothing, and 3D real-time simulation.">
+    <title>SteadyPath — 3D Autonomous Warehouse Simulation &amp; Path Planning</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/index.css">
+
+    <!-- ES Module Import Map for Three.js (Zero Build Step) -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "./src/vendor/three/three.module.js",
+        "three/addons/controls/OrbitControls.js": "./src/vendor/three/OrbitControls.js"
+      }
+    }
+    </script>
 </head>
 <body>
     <div class="app">
         <!-- Header -->
         <header class="header">
-            <div>
-                <h1 class="header__title">SteadyPath</h1>
-                <p class="header__subtitle">Autonomous Warehouse Navigation &amp; Dynamic Path Planning</p>
+            <div class="header__brand">
+                <h1 class="header__title">SteadyPath 3D</h1>
+                <p class="header__subtitle">Autonomous Warehouse AGV Navigation &amp; Dynamic Replanning</p>
             </div>
+
+            <!-- View Switcher (3D WebGL vs 2D Canvas) -->
+            <div class="header__center">
+                <div class="view-switcher" role="tablist">
+                    <button type="button" id="btn-toggle-3d" class="view-btn active" title="Switch to Full 3D Simulation View">🌐 3D Simulation</button>
+                    <button type="button" id="btn-toggle-2d" class="view-btn" title="Switch to 2D Plan View">🗺️ 2D Plan View</button>
+                </div>
+            </div>
+
             <div class="header__status">
                 <span class="status-dot" id="status-dot"></span>
                 <span id="status-text">IDLE</span>
@@ -26,9 +45,37 @@
 
         <!-- Main Simulation Viewport -->
         <main class="canvas-area">
-            <canvas id="sim-canvas"></canvas>
+            <!-- 3D WebGL Container -->
+            <div id="webgl-container"></div>
+
+            <!-- Fallback / 2D Canvas View -->
+            <canvas id="sim-canvas" style="display: none;"></canvas>
+
+            <!-- Mode Indicator Badge -->
             <div class="mode-indicator destination" id="mode-indicator">
-                Mode: Set Destination (Click Canvas)
+                Mode: Set Destination (Click Floor)
+            </div>
+
+            <!-- Floating 3D Camera Controls Toolbar -->
+            <div class="camera-toolbar" id="camera-toolbar">
+                <span class="cam-label">CAM:</span>
+                <button type="button" class="cam-btn active" data-view="orbit" title="Orbit / Free Perspective View">📐 Orbit</button>
+                <button type="button" class="cam-btn" data-view="topdown" title="Top-Down Plan View">🗺️ Top-Down</button>
+                <button type="button" class="cam-btn" data-view="follow" title="Chase AGV Follow Camera">🚗 Chase Cam</button>
+                <button type="button" class="cam-btn" data-view="firstperson" title="First-Person AGV Bumper Camera">📹 Bumper Cam</button>
+                <button type="button" class="cam-btn" data-view="isometric" title="Isometric Engineering View">🎥 Isometric</button>
+                <button type="button" class="cam-btn reset" id="btn-cam-reset" title="Reset Camera Vantage">↺ Reset</button>
+            </div>
+
+            <!-- Navigation Controls Hint Overlay -->
+            <div class="viewport-hints" id="viewport-hints">
+                <span>🖱️ Left-Drag: Orbit</span>
+                <span class="sep">•</span>
+                <span>Right-Drag: Pan</span>
+                <span class="sep">•</span>
+                <span>Scroll: Zoom</span>
+                <span class="sep">•</span>
+                <span>Click Floor: Action</span>
             </div>
         </main>
 
@@ -40,6 +87,17 @@
                 <div class="btn-group">
                     <button type="button" id="btn-mode-dest" class="btn active">🎯 Set Destination</button>
                     <button type="button" id="btn-mode-block" class="btn">🚧 Add Blockage</button>
+                </div>
+            </section>
+
+            <!-- Camera Views Panel in Sidebar -->
+            <section class="panel" id="panel-camera">
+                <h2 class="panel__title">Camera Vantage</h2>
+                <div class="btn-group">
+                    <button type="button" id="btn-side-cam-orbit" class="btn active">📐 Orbit (Free)</button>
+                    <button type="button" id="btn-side-cam-topdown" class="btn">🗺️ Top-Down</button>
+                    <button type="button" id="btn-side-cam-follow" class="btn">🚗 Chase Cam</button>
+                    <button type="button" id="btn-side-cam-firstperson" class="btn">📹 Bumper Cam</button>
                 </div>
             </section>
 
@@ -106,27 +164,35 @@
 
             <!-- Legend Panel -->
             <section class="panel">
-                <h2 class="panel__title">Route &amp; Map Legend</h2>
+                <h2 class="panel__title">3D Route &amp; World Legend</h2>
                 <div class="legend">
                     <div class="legend-item">
-                        <span class="legend-swatch dashed" style="--color: #00bcd4; background: #00bcd4;"></span>
-                        <span>Raw A* Path (Global)</span>
+                        <span class="legend-swatch" style="background: #00bcd4;"></span>
+                        <span>Raw A* Path (Global Graph)</span>
                     </div>
                     <div class="legend-item">
                         <span class="legend-swatch" style="background: #2ecc71;"></span>
-                        <span>Smoothed Path (Trajectory)</span>
+                        <span>Smoothed 3D Trajectory</span>
                     </div>
                     <div class="legend-item">
                         <span class="legend-swatch" style="background: #ff9800;"></span>
-                        <span>Replanned Route</span>
+                        <span>Dynamically Replanned Route</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-swatch" style="background: #ffd740;"></span>
+                        <span>Holographic Goal Beacon</span>
                     </div>
                     <div class="legend-item">
                         <span class="legend-swatch" style="background: #ff5252;"></span>
-                        <span>Dynamic Obstacle / 🚧 Blockage</span>
+                        <span>3D Hazard Barricade / Blockage</span>
                     </div>
                     <div class="legend-item">
-                        <span class="legend-swatch" style="background: #4a3520;"></span>
-                        <span>Storage Racks &amp; Walls</span>
+                        <span class="legend-swatch" style="background: #1a4373;"></span>
+                        <span>Industrial Pallet Racks &amp; Cargo</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-swatch" style="background: #00e5ff;"></span>
+                        <span>3D AGV Robot (Spinning LiDAR)</span>
                     </div>
                 </div>
             </section>
@@ -140,7 +206,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <span>Warehouse: 30.0m × 20.0m | Vehicle: 2.0m × 1.2m | Resolution: 0.5m</span>
+            <span>Warehouse: 30.0m × 20.0m | AGV: 2.0m × 1.2m | Resolution: 0.5m | Engine: Three.js WebGL</span>
             <span id="cursor-coords" class="footer__coords">X: 0.00 m, Y: 0.00 m</span>
         </footer>
     </div>

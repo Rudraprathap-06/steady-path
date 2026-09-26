@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node src/tests/runNodeTests.js",
-    "dev": "npx -y serve ."
+    "dev": "node server.js",
+    "start": "node server.js"
   },
   "keywords": [
     "path-planning",
@@ -15,5 +16,8 @@
     "autonomous-vehicle"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.186.1"
+  }
 }
