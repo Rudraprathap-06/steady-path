@@ -1,3 +1,18 @@
+# Dependencies
 node_modules/
+
+# OS metadata
 .DS_Store
+Thumbs.db
+
+# Logs
 *.log
+
+# Python cache & runtime artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+env/
+venv/
