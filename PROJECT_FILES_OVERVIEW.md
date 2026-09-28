@@ -1,3 +1,4 @@
+
 # SteadyPath — Project Files & Architecture Directory
 
 This document details the exact purpose, responsibility, inputs, outputs, and relationships of **every file** in the SteadyPath Autonomous Warehouse Path Planning & Replanning Project.
